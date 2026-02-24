@@ -49,6 +49,9 @@ export async function build(deployId, tarballBuffer, meta) {
     execSync(`tar xzf ${tarPath} -C ${appDir}`, { stdio: 'pipe' });
     unlinkSync(tarPath);
 
+    // Remove macOS resource fork files (._*) that break webpack/SWC
+    execSync(`find ${appDir} -name '._*' -delete 2>/dev/null || true`, { stdio: 'pipe' });
+
     // 2. Install (all deps — devDependencies needed for build)
     setDeployStatus(deployId, { deployId, name, status: 'installing' });
     const pm = packageManager || 'npm';
@@ -57,6 +60,16 @@ export async function build(deployId, tarballBuffer, meta) {
       stdio: 'pipe',
       timeout: 120_000,
     });
+
+    // Ensure Next.js has the native SWC binary (avoids WASM fallback crashes)
+    if (framework === 'next' || existsSync(join(appDir, 'node_modules/next'))) {
+      try {
+        execSync(`cd ${appDir} && npm install --no-save @next/swc-linux-x64-gnu 2>/dev/null || true`, {
+          stdio: 'pipe',
+          timeout: 30_000,
+        });
+      } catch { /* best effort */ }
+    }
 
     // 3. Build
     setDeployStatus(deployId, { deployId, name, status: 'building' });
@@ -83,9 +96,21 @@ export async function build(deployId, tarballBuffer, meta) {
     );
     execSync('pm2 save', { stdio: 'pipe' });
 
-    // Wait for app to respond (up to 10s)
+    // Wait for app to respond (up to 15s)
     let healthy = false;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 15; i++) {
+      // Check if PM2 process is still running
+      try {
+        const pm2Info = execFileSync('pm2', ['jlist'], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+        const procs = JSON.parse(pm2Info);
+        const proc = procs.find(p => p.name === name);
+        if (proc && proc.pm2_env?.status === 'errored') {
+          throw new Error('App crashed on startup. Check logs with: spun logs ' + name);
+        }
+      } catch (e) {
+        if (e.message.includes('crashed')) throw e;
+      }
+
       try {
         execSync(`curl -s -o /dev/null -w '%{http_code}' http://localhost:${port}`, {
           stdio: 'pipe',
@@ -96,6 +121,13 @@ export async function build(deployId, tarballBuffer, meta) {
       } catch {
         await new Promise((r) => setTimeout(r, 1000));
       }
+    }
+
+    if (!healthy) {
+      // Clean up the failed start
+      try { execFileSync('pm2', ['delete', name], { stdio: 'pipe' }); } catch {}
+      try { execSync('pm2 save', { stdio: 'pipe' }); } catch {}
+      throw new Error('App failed to start — no response after 15s');
     }
 
     // 5. Configure Caddy
@@ -134,6 +166,12 @@ export async function build(deployId, tarballBuffer, meta) {
     return { url, expiresAt, secret };
   } catch (err) {
     const errorMsg = err.stderr?.toString().slice(-500) || err.message;
+
+    // Clean up extracted files on failure
+    try {
+      rmSync(appDir, { recursive: true, force: true });
+    } catch { /* ignore */ }
+
     setDeployStatus(deployId, {
       deployId,
       name,

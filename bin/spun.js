@@ -9,7 +9,7 @@ if (major < 18) {
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { deploy } from '../lib/deploy.js';
-import { listApps, deleteApp, fetchLogs } from '../lib/client.js';
+import { listApps, deleteApp } from '../lib/client.js';
 import { sanitizeAppName } from '../lib/validate.js';
 import { removeToken } from '../lib/tokens.js';
 
@@ -69,22 +69,6 @@ program
         );
       }
       console.log('');
-    } catch (err) {
-      console.error(chalk.red(err.message));
-      process.exit(1);
-    }
-  });
-
-// spun logs <app>
-program
-  .command('logs <app>')
-  .description('Fetch app logs')
-  .option('-n, --lines <n>', 'number of log lines', '50')
-  .action(async (app, opts) => {
-    try {
-      const appName = sanitizeAppName(app);
-      const logs = await fetchLogs(appName, opts.lines);
-      console.log(logs);
     } catch (err) {
       console.error(chalk.red(err.message));
       process.exit(1);

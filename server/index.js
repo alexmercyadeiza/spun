@@ -19,6 +19,12 @@ app.use('*', async (c, next) => {
   console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
 });
 
+// Global error handler
+app.onError((err, c) => {
+  console.error(`[ERROR] ${c.req.method} ${c.req.path}:`, err.message);
+  return c.json({ error: 'Internal server error' }, 500);
+});
+
 // Routes
 app.route('/', healthRoutes);
 app.route('/', deployRoutes);

@@ -1,6 +1,6 @@
 {
   "name": "spunrun",
-  "version": "2.0.1",
+  "version": "2.0.3",
   "description": "Deploy SSR apps to spun.run with one command",
   "type": "module",
   "bin": {

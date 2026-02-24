@@ -26,7 +26,6 @@ No config, no SSH keys, no accounts. Deployments expire after 24 hours.
 spun deploy          # deploy current directory
 spun deploy my-app   # deploy with a custom name
 spun ls              # list your deployed apps
-spun logs <name>     # view app logs
 spun rm <name>       # remove an app
 ```
 
